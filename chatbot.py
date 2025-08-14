@@ -1,59 +1,62 @@
-import streamlit as st
-import speech_recognition as sr
-from gtts import gTTS
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 import os
-import tempfile
-from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, RTCConfiguration
+from dotenv import load_dotenv
+import datetime
 
-# ------------------------------
-# Chatbot logic placeholder
-def chatbot_response(user_input):
-    return f"You said: {user_input}"
+# Load environment variables
+load_dotenv()
 
-# ------------------------------
-st.title("🎤 Voice Chatbot")
+# Initialize model
+model = ChatGoogleGenerativeAI(
+    google_api_key=os.getenv("GOOGLE_API_KEY"),
+    model="gemini-2.5-flash"
+)
 
-# Voice Input
-recognizer = sr.Recognizer()
+# Chat history
+chat_history = [
+    SystemMessage(content="You are a helpful assistant")
+]
 
-st.subheader("Voice Input")
-audio_file = st.file_uploader("Upload your voice (WAV/MP3)", type=["wav", "mp3"])
+# Log file for saving chat
+log_file = f"chat_log_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
-if audio_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(audio_file.read())
-        tmp_path = tmp.name
+print("🤖 ChatBot is running! Type 'exit' to quit.")
+print("Type 'history' to view chat history, 'save' to save the conversation.")
 
-    with sr.AudioFile(tmp_path) as source:
-        audio_data = recognizer.record(source)
-        try:
-            text = recognizer.recognize_google(audio_data)
-            st.write("**Recognized Speech:**", text)
+while True:
+    user_input = input("You: ").strip()
 
-            # Chatbot reply
-            reply = chatbot_response(text)
-            st.write("**Bot:**", reply)
+    if not user_input:
+        continue
 
-            # Text-to-Speech
-            tts = gTTS(reply)
-            tts_path = tempfile.mktemp(suffix=".mp3")
-            tts.save(tts_path)
-            st.audio(tts_path)
+    # Exit
+    if user_input.lower() == "exit":
+        print("👋 Goodbye!")
+        break
 
-        except sr.UnknownValueError:
-            st.error("Speech not recognized")
-        except sr.RequestError:
-            st.error("API request failed")
+    # Show history
+    if user_input.lower() == "history":
+        print("\n📜 Chat History:")
+        for msg in chat_history:
+            role = "You" if isinstance(msg, HumanMessage) else "Bot" if isinstance(msg, AIMessage) else "System"
+            print(f"{role}: {msg.content}")
+        print()
+        continue
 
-# Text Input
-st.subheader("Text Input")
-user_text = st.text_input("Type your message")
-if user_text:
-    reply = chatbot_response(user_text)
-    st.write("**Bot:**", reply)
+    # Save chat to file
+    if user_input.lower() == "save":
+        with open(log_file, "w", encoding="utf-8") as f:
+            for msg in chat_history:
+                role = "You" if isinstance(msg, HumanMessage) else "Bot" if isinstance(msg, AIMessage) else "System"
+                f.write(f"{role}: {msg.content}\n")
+        print(f"💾 Chat saved to {log_file}")
+        continue
 
-    # Voice Output for text input
-    tts = gTTS(reply)
-    tts_path = tempfile.mktemp(suffix=".mp3")
-    tts.save(tts_path)
-    st.audio(tts_path)
+    # Append user message and get AI response
+    chat_history.append(HumanMessage(content=user_input))
+    result = model.invoke(chat_history)
+    chat_history.append(AIMessage(content=result.content))
+
+    # Print AI response
+    print("Bot:", result.content)
