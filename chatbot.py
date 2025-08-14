@@ -1,8 +1,8 @@
+import streamlit as st
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 import os
 from dotenv import load_dotenv
-import datetime
 
 # Load environment variables
 load_dotenv()
@@ -13,50 +13,34 @@ model = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash"
 )
 
-# Chat history
-chat_history = [
-    SystemMessage(content="You are a helpful assistant")
-]
+# Streamlit page config
+st.set_page_config(page_title="AI Chatbot", page_icon="🤖")
+st.title("🤖 Simple AI Chatbot")
 
-# Log file for saving chat
-log_file = f"chat_log_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+# Initialize session state for chat history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [SystemMessage(content="You are a helpful assistant")]
 
-print("🤖 ChatBot is running! Type 'exit' to quit.")
-print("Type 'history' to view chat history, 'save' to save the conversation.")
+# Display chat history in chat-like UI
+for msg in st.session_state.chat_history[1:]:  # skip system message
+    if isinstance(msg, HumanMessage):
+        with st.chat_message("user"):
+            st.markdown(msg.content)
+    elif isinstance(msg, AIMessage):
+        with st.chat_message("assistant"):
+            st.markdown(msg.content)
 
-while True:
-    user_input = input("You: ").strip()
+# Chat input box (Enter to send)
+if user_input := st.chat_input("Type your message..."):
+    # Display user message
+    st.session_state.chat_history.append(HumanMessage(content=user_input))
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    if not user_input:
-        continue
+    # Get bot response
+    result = model.invoke(st.session_state.chat_history)
+    st.session_state.chat_history.append(AIMessage(content=result.content))
 
-    # Exit
-    if user_input.lower() == "exit":
-        print("👋 Goodbye!")
-        break
-
-    # Show history
-    if user_input.lower() == "history":
-        print("\n📜 Chat History:")
-        for msg in chat_history:
-            role = "You" if isinstance(msg, HumanMessage) else "Bot" if isinstance(msg, AIMessage) else "System"
-            print(f"{role}: {msg.content}")
-        print()
-        continue
-
-    # Save chat to file
-    if user_input.lower() == "save":
-        with open(log_file, "w", encoding="utf-8") as f:
-            for msg in chat_history:
-                role = "You" if isinstance(msg, HumanMessage) else "Bot" if isinstance(msg, AIMessage) else "System"
-                f.write(f"{role}: {msg.content}\n")
-        print(f"💾 Chat saved to {log_file}")
-        continue
-
-    # Append user message and get AI response
-    chat_history.append(HumanMessage(content=user_input))
-    result = model.invoke(chat_history)
-    chat_history.append(AIMessage(content=result.content))
-
-    # Print AI response
-    print("Bot:", result.content)
+    # Display bot response
+    with st.chat_message("assistant"):
+        st.markdown(result.content)
